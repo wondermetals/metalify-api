@@ -9,7 +9,7 @@ const CACHE_TTL = 10000; // 10 sec
 let cache = null;
 let lastFetch = 0;
 
-const api = axios.create({ timeout: 4000 });
+const api = axios.create({ timeout: 5000 });
 
 app.get("/prices", async (req, res) => {
   const now = Date.now();
@@ -21,8 +21,13 @@ app.get("/prices", async (req, res) => {
 
   try {
     const [crypto, metals, forex] = await Promise.allSettled([
+      // Crypto (INR)
       api.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=inr"),
-      api.get("https://api.metals.live/v1/spot"),
+
+      // Metals (better source)
+      api.get("https://data-asg.goldprice.org/dbXRates/USD"),
+
+      // USD → INR
       api.get("https://api.exchangerate.host/latest?base=USD&symbols=INR")
     ]);
 
@@ -35,11 +40,11 @@ app.get("/prices", async (req, res) => {
     let goldUSD, silverUSD, platinumUSD;
 
     if (metals.status === "fulfilled") {
-      metals.value.data.forEach(item => {
-        if (item.gold) goldUSD = item.gold;
-        if (item.silver) silverUSD = item.silver;
-        if (item.platinum) platinumUSD = item.platinum;
-      });
+      const rates = metals.value.data.items[0];
+
+      goldUSD = rates.xauPrice;
+      silverUSD = rates.xagPrice;
+      platinumUSD = rates.xptPrice;
     }
 
     // fallback to cache if needed
@@ -71,7 +76,7 @@ app.get("/prices", async (req, res) => {
       },
       updatedAt: new Date(),
 
-      // store raw for fallback
+      // raw backup
       goldUSD,
       silverUSD,
       platinumUSD
@@ -84,7 +89,7 @@ app.get("/prices", async (req, res) => {
     res.json(data);
 
   } catch (err) {
-    // NEVER fail — always return something
+    // fallback (rare now)
     res.json(
       cache || {
         metals: {
@@ -106,9 +111,9 @@ app.get("/prices", async (req, res) => {
   }
 });
 
-// Optional: homepage message (fixes "Not Found")
+// homepage route
 app.get("/", (req, res) => {
-  res.send("Metalify API is running 🚀 Use /prices");
+  res.send("Metalify API running 🚀 Use /prices");
 });
 
 app.listen(3000, () => console.log("🚀 Pro API running"));
