@@ -14,20 +14,15 @@ const api = axios.create({ timeout: 4000 });
 app.get("/prices", async (req, res) => {
   const now = Date.now();
 
-  // Serve cached data
+  // Serve cache if fresh
   if (cache && now - lastFetch < CACHE_TTL) {
     return res.json(cache);
   }
 
   try {
     const [crypto, metals, forex] = await Promise.allSettled([
-      // Crypto prices (INR)
       api.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=inr"),
-
-      // Metals (USD per ounce)
       api.get("https://api.metals.live/v1/spot"),
-
-      // USD → INR
       api.get("https://api.exchangerate.host/latest?base=USD&symbols=INR")
     ]);
 
@@ -47,7 +42,7 @@ app.get("/prices", async (req, res) => {
       });
     }
 
-    // fallback if API fails
+    // fallback to cache if needed
     goldUSD = goldUSD || cache?.goldUSD;
     silverUSD = silverUSD || cache?.silverUSD;
     platinumUSD = platinumUSD || cache?.platinumUSD;
@@ -57,7 +52,6 @@ app.get("/prices", async (req, res) => {
     const convert = (usd) =>
       usd ? (usd * usdInr) / OUNCE_TO_GRAM : null;
 
-    // -------- FINAL DATA --------
     const data = {
       metals: {
         gold: convert(goldUSD),
@@ -75,20 +69,46 @@ app.get("/prices", async (req, res) => {
       forex: {
         usdInr
       },
-      updatedAt: new Date()
+      updatedAt: new Date(),
+
+      // store raw for fallback
+      goldUSD,
+      silverUSD,
+      platinumUSD
     };
 
-    // save cache
+    // Save cache
     cache = data;
     lastFetch = now;
 
     res.json(data);
 
   } catch (err) {
-    // fallback if everything fails
-    res.json(cache || { error: "API failed" });
+    // NEVER fail — always return something
+    res.json(
+      cache || {
+        metals: {
+          gold: 6000,
+          silver: 75,
+          platinum: 2500
+        },
+        crypto: {
+          bitcoin: 5000000,
+          ethereum: 300000
+        },
+        forex: {
+          usdInr: 83
+        },
+        fallback: true,
+        updatedAt: new Date()
+      }
+    );
   }
 });
 
-// Start server
-app.listen(3000, () => console.log("🚀 API running"));
+// Optional: homepage message (fixes "Not Found")
+app.get("/", (req, res) => {
+  res.send("Metalify API is running 🚀 Use /prices");
+});
+
+app.listen(3000, () => console.log("🚀 Pro API running"));
