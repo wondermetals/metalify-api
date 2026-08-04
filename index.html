@@ -606,10 +606,17 @@ body::after{
 .special-view{background:linear-gradient(145deg,rgba(8,25,36,.86),rgba(28,12,38,.84));border-color:rgba(116,224,255,.3)}
 .selector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:22px 0}
 .selector-grid .input{appearance:auto}
+.selector-grid .search-field{appearance:none;color:#f8fbff;background:rgba(4,10,18,.92);border-color:rgba(134,222,255,.42)}
+.selector-grid .search-field::placeholder{color:#d5e4ee}
+.search-field:focus{outline:2px solid rgba(105,223,255,.55);outline-offset:2px}
+option{color:#101722;background:#f4f8fc}
 .fuel-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:18px}
 .fuel-card{padding:24px;border-radius:22px;background:rgba(255,255,255,.05);border:1px solid rgba(116,224,255,.2)}
 .fuel-card strong{display:block;margin-top:8px;font-size:30px;color:#b8f1ff}
 .special-note{color:var(--muted);line-height:1.6;margin:12px 0 0}
+.asset-btn[data-market="fuel"],.asset-btn[data-market="exchange"]{border-color:rgba(88,232,255,.72);background:linear-gradient(145deg,rgba(13,75,98,.92),rgba(39,20,84,.94));box-shadow:0 0 24px rgba(76,224,255,.2),inset 0 0 0 1px rgba(255,255,255,.12)}
+.asset-btn[data-market="fuel"] span,.asset-btn[data-market="exchange"] span{color:#e9fbff;text-shadow:0 0 14px rgba(88,232,255,.65)}
+.nav-actions .mini-btn:nth-last-child(-n+2){border-color:rgba(88,232,255,.52);background:linear-gradient(90deg,rgba(24,105,129,.72),rgba(73,46,135,.7));box-shadow:0 0 16px rgba(88,232,255,.14)}
 
 .mini-grid{
     display:grid;
@@ -909,7 +916,7 @@ body::after{
         <section id="fuelView" class="view">
             <div class="detail-shell special-view">
                 <div class="detail-top"><div><h2 class="detail-title">Fuel Prices</h2><p class="detail-subtitle">Select an Indian state or Union Territory, then choose a city to see the latest petrol, diesel and CNG rates.</p></div><div class="live-pill">Live API feed</div></div>
-                <div class="selector-grid"><select class="input" id="fuelState" onchange="loadFuelCities()"><option value="">Select state / UT</option></select><select class="input" id="fuelCity" onchange="clearFuelResult()" disabled><option value="">Select city</option></select></div>
+                <div class="selector-grid"><input class="input search-field" id="fuelState" list="fuelStateOptions" placeholder="Search state / UT" autocomplete="off" oninput="loadFuelCities()"><datalist id="fuelStateOptions"></datalist><input class="input search-field" id="fuelCity" list="fuelCityOptions" placeholder="Search city" autocomplete="off" oninput="clearFuelResult()" disabled><datalist id="fuelCityOptions"></datalist></div>
                 <button class="tool-btn" type="button" onclick="loadFuelRates()">Fetch Fuel Prices</button>
                 <p class="special-note" id="fuelStatus">Choose a state and city to fetch prices.</p><div class="fuel-cards" id="fuelCards"></div>
             </div>
@@ -918,7 +925,7 @@ body::after{
         <section id="exchangeView" class="view">
             <div class="detail-shell special-view">
                 <div class="detail-top"><div><h2 class="detail-title">Money Xchange</h2><p class="detail-subtitle">Choose two different currencies from the full supported list and get the latest ECB reference exchange rate.</p></div><div class="live-pill">Frankfurter / ECB</div></div>
-                <div class="selector-grid"><select class="input" id="exchangeBase"><option value="">From currency</option></select><select class="input" id="exchangeQuote"><option value="">To currency</option></select></div>
+                <div class="selector-grid"><input class="input search-field" id="exchangeBase" list="currencyOptionsBase" placeholder="Search from currency or symbol" autocomplete="off"><datalist id="currencyOptionsBase"></datalist><input class="input search-field" id="exchangeQuote" list="currencyOptionsQuote" placeholder="Search to currency or symbol" autocomplete="off"><datalist id="currencyOptionsQuote"></datalist></div>
                 <div class="form"><input class="input" id="exchangeAmount" type="number" min="0" step="any" placeholder="Amount to convert (optional)"><button class="tool-btn" type="button" onclick="loadExchangeRate()">Show Exchange Rate</button><div class="result" id="exchangeResult">Choose two different currencies to begin.</div></div>
                 <p class="special-note" id="exchangeStatus">Rates are reference rates and may update on business days.</p>
             </div>
@@ -1090,24 +1097,26 @@ async function loadFuelStates(){
     status.textContent = "Loading states...";
     try{
         const data = await requestApi("action=fuel-states");
-        state.innerHTML = '<option value="">Select state / UT</option>' + (Array.isArray(data) ? data : (data.states || [])).map(item => `<option value="${item.value || item.stateId}">${item.name || item.stateName}</option>`).join("");
+        const states = Array.isArray(data) ? data : (data.states || []);
+        document.getElementById("fuelStateOptions").innerHTML = states.map(item => `<option value="${item.name || item.stateName}" data-code="${item.value || item.stateId}"></option>`).join("");
         state.dataset.loaded = "1"; status.textContent = "Choose a state, then a city.";
     }catch(error){ status.textContent = error.message; }
 }
 async function loadFuelCities(){
     const state = document.getElementById("fuelState"), city = document.getElementById("fuelCity"), status = document.getElementById("fuelStatus");
-    city.disabled = true; city.innerHTML = '<option value="">Loading cities...</option>'; document.getElementById("fuelCards").innerHTML = "";
-    if(!state.value){ city.innerHTML = '<option value="">Select city</option>'; status.textContent = "Choose a state and city to fetch prices."; return; }
+    city.disabled = true; document.getElementById("fuelCityOptions").innerHTML = ""; document.getElementById("fuelCards").innerHTML = "";
+    const stateCode = resolveSearchCode("fuelState", "fuelStateOptions");
+    if(!stateCode){ status.textContent = "Choose a state from the matching suggestions."; return; }
     try{
-        const data = await requestApi(`action=fuel-cities&state=${encodeURIComponent(state.value)}`);
+        const data = await requestApi(`action=fuel-cities&state=${encodeURIComponent(stateCode)}`);
         const cities = Array.isArray(data) ? data : (data.cities || data.cityPrices || data.citiesList || []);
-        city.innerHTML = '<option value="">Select city</option>' + cities.map(item => `<option value="${item.value || item.cityId || item.id}">${item.name || item.cityName}</option>`).join("");
+        document.getElementById("fuelCityOptions").innerHTML = cities.map(item => `<option value="${item.name || item.cityName}" data-code="${item.value || item.cityId || item.id}"></option>`).join("");
         city.disabled = false; status.textContent = "City loaded. Fetch the latest prices.";
     }catch(error){ city.innerHTML = '<option value="">Could not load cities</option>'; status.textContent = error.message; }
 }
 function clearFuelResult(){ document.getElementById("fuelCards").innerHTML = ""; }
 async function loadFuelRates(){
-    const state = document.getElementById("fuelState").value, city = document.getElementById("fuelCity").value, status = document.getElementById("fuelStatus"), cards = document.getElementById("fuelCards");
+    const city = resolveSearchCode("fuelCity", "fuelCityOptions"), status = document.getElementById("fuelStatus"), cards = document.getElementById("fuelCards");
     if(!state || !city){ status.textContent = "Select both a state / UT and a city first."; return; }
     status.textContent = "Fetching live fuel prices...";
     try{
@@ -1122,18 +1131,24 @@ async function loadCurrencies(){
     status.textContent = "Loading supported currencies...";
     try{
         const data = await requestApi("action=currencies"), entries = Object.entries(data.currencies || {}).sort((a,b)=>a[1].localeCompare(b[1]));
-        const options = entries.map(([code,name])=>`<option value="${code}">${name} (${code})</option>`).join("");
-        base.innerHTML = '<option value="">From currency</option>' + options; quote.innerHTML = '<option value="">To currency</option>' + options; base.dataset.loaded = "1"; status.textContent = "Choose two different currencies.";
+        const options = entries.map(([code,name])=>`<option value="${code} — ${name}" data-code="${code}"></option>`).join("");
+        document.getElementById("currencyOptionsBase").innerHTML = options; document.getElementById("currencyOptionsQuote").innerHTML = options; base.dataset.loaded = "1"; status.textContent = `${entries.length} currencies loaded. Search by name or code.`;
     }catch(error){ status.textContent = error.message; }
 }
 async function loadExchangeRate(){
-    const base = document.getElementById("exchangeBase").value, quote = document.getElementById("exchangeQuote").value, amount = parseFloat(document.getElementById("exchangeAmount").value), result = document.getElementById("exchangeResult"), status = document.getElementById("exchangeStatus");
+    const base = resolveSearchCode("exchangeBase", "currencyOptionsBase"), quote = resolveSearchCode("exchangeQuote", "currencyOptionsQuote"), amount = parseFloat(document.getElementById("exchangeAmount").value), result = document.getElementById("exchangeResult"), status = document.getElementById("exchangeStatus");
     if(!base || !quote || base === quote){ result.textContent = "Choose two different currencies."; return; }
     result.textContent = "Loading latest rate...";
     try{
         const data = await requestApi(`action=exchange&base=${base}&quote=${quote}`), rate = Number(data.rate), converted = Number.isFinite(amount) ? ` • ${amount.toLocaleString(undefined,{maximumFractionDigits:6})} ${base} = ${(amount*rate).toLocaleString(undefined,{maximumFractionDigits:6})} ${quote}` : "";
         result.textContent = `1 ${base} = ${rate.toLocaleString(undefined,{maximumFractionDigits:8})} ${quote}${converted}`; status.textContent = `Reference date: ${data.date || "latest"} • Source: ${data.source}`;
     }catch(error){ result.textContent = error.message; }
+}
+
+function resolveSearchCode(inputId, listId){
+    const input = document.getElementById(inputId), value = input.value.trim().toLowerCase();
+    const option = Array.from(document.getElementById(listId).options).find(item => item.value.trim().toLowerCase() === value);
+    return option ? (option.dataset.code || option.value.split(" — ")[0].toLowerCase()) : "";
 }
 
 function renderAsset(key, resetMessages = false){
