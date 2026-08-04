@@ -1116,7 +1116,7 @@ async function loadFuelCities(){
 }
 function clearFuelResult(){ document.getElementById("fuelCards").innerHTML = ""; }
 async function loadFuelRates(){
-    const city = resolveSearchCode("fuelCity", "fuelCityOptions"), status = document.getElementById("fuelStatus"), cards = document.getElementById("fuelCards");
+    const state = resolveSearchCode("fuelState", "fuelStateOptions"), city = resolveSearchCode("fuelCity", "fuelCityOptions"), status = document.getElementById("fuelStatus"), cards = document.getElementById("fuelCards");
     if(!state || !city){ status.textContent = "Select both a state / UT and a city first."; return; }
     status.textContent = "Fetching live fuel prices...";
     try{
@@ -1131,7 +1131,7 @@ async function loadCurrencies(){
     status.textContent = "Loading supported currencies...";
     try{
         const data = await requestApi("action=currencies"), entries = Object.entries(data.currencies || {}).sort((a,b)=>a[1].localeCompare(b[1]));
-        const options = entries.map(([code,name])=>`<option value="${code} — ${name}" data-code="${code}"></option>`).join("");
+        const options = entries.map(([code,name])=>`<option value="${code} | ${name}" data-code="${code}"></option>`).join("");
         document.getElementById("currencyOptionsBase").innerHTML = options; document.getElementById("currencyOptionsQuote").innerHTML = options; base.dataset.loaded = "1"; status.textContent = `${entries.length} currencies loaded. Search by name or code.`;
     }catch(error){ status.textContent = error.message; }
 }
@@ -1148,7 +1148,9 @@ async function loadExchangeRate(){
 function resolveSearchCode(inputId, listId){
     const input = document.getElementById(inputId), value = input.value.trim().toLowerCase();
     const option = Array.from(document.getElementById(listId).options).find(item => item.value.trim().toLowerCase() === value);
-    return option ? (option.dataset.code || option.value.split(" — ")[0].toLowerCase()) : "";
+    if(option) return option.dataset.code || option.value.split(" | ")[0].toLowerCase();
+    const codeOption = Array.from(document.getElementById(listId).options).find(item => (item.dataset.code || "").toLowerCase() === value);
+    return codeOption ? codeOption.dataset.code : "";
 }
 
 function renderAsset(key, resetMessages = false){
