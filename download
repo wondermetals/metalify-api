@@ -1,0 +1,19 @@
+DirectoryIndex index.html
+
+# InfinityFree can serve uploaded module files without a JavaScript MIME type.
+# Browsers refuse to execute <script type="module"> when .js is text/plain.
+AddType application/javascript .js .mjs
+AddType text/css .css
+AddType application/json .json
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(metalify-private-config|config)\.php$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^(metalify-private-config|config)\.php$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
